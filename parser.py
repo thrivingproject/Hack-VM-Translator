@@ -65,6 +65,8 @@ class Parser:
 
         In the case of C_ARITHMETIC the command itself (add, sub, etc.) is returned. Should not be called if the current command is C_RETURN.
         """
+        if self.command_type() == CommandType.C_RETURN:
+            raise ValueError("arg_1 called on C_RETURN command")
         items = self._get_command_items()
         if self.command_type() == CommandType.C_ARITHMETIC:
             return items[0]
@@ -76,6 +78,13 @@ class Parser:
 
         Should be called only if the current command is C_PUSH, C_POP, C_FUNCTION, or, C_CALL.
         """
+        if self.command_type() not in {
+            CommandType.C_PUSH,
+            CommandType.C_POP,
+            CommandType.C_FUNCTION,
+            CommandType.C_CALL,
+        }:
+            raise ValueError("arg_2 called on invalid command type")
         items = self._get_command_items()
         return int(items[2])
 
