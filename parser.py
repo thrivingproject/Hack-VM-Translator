@@ -45,9 +45,20 @@ class Parser:
                 return CommandType.C_PUSH
             case "pop":
                 return CommandType.C_POP
-            case _:
-                # TODO
+            case "call":
+                return CommandType.C_CALL
+            case "goto":
+                return CommandType.C_GOTO
+            case "if-goto":
+                return CommandType.C_IF
+            case "function":
+                return CommandType.C_FUNCTION
+            case "label":
+                return CommandType.C_LABEL
+            case "return":
                 return CommandType.C_RETURN
+            case _:
+                raise ValueError("Unknown command type")
 
     def arg_1(self) -> str:
         """Return the first argument of the current command.

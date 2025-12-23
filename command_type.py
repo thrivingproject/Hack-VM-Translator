@@ -10,3 +10,4 @@ class CommandType(Enum):
     C_IF = auto()
     C_RETURN = auto()
     C_CALL = auto()
+    C_FUNCTION = auto()
