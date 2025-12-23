@@ -2,7 +2,7 @@ from typing import Literal
 from command_type import CommandType
 from os import path
 
-_POP_STACK_TOP_TO_D = ("@SP", "AM=M-1", "D=M")
+_POP_TO_D = ("@SP", "AM=M-1", "D=M")
 _PUSH_D_TO_STACK = ("@SP", "A=M", "M=D", "@SP", "M=M+1")
 _VM_TRUE = -1
 _VM_FALSE = 0
@@ -60,13 +60,13 @@ class CodeWriter:
         Args:
             command: The arithmetic-logical command to be performed.
         """
-        lines = [f"// {command}", *_POP_STACK_TOP_TO_D]
+        lines = [f"// {command}", *_POP_TO_D]
         match command:
             case "add" | "sub" | "eq" | "gt" | "lt" | "and" | "or":
                 lines += [
                     "@R14",
                     "M=D",
-                    *_POP_STACK_TOP_TO_D,
+                    *_POP_TO_D,
                     "@R14",
                 ]
                 if command == "add":
@@ -142,7 +142,7 @@ class CodeWriter:
                         "M=D",
                     ]
                 # Pop top of stack to D so we can write D to the address
-                lines += [*_POP_STACK_TOP_TO_D]
+                lines += [*_POP_TO_D]
                 # Get the address so we can write D to it
                 lines.append(f"@{ptr}")
                 if segment in ("local", "argument", "this", "that"):
