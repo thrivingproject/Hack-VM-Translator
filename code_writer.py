@@ -19,7 +19,7 @@ class CodeWriter:
         """
         root, _ = path.splitext(fpath)
         self._fname = path.basename(root)
-        self._f = open(f"{root}.asm", "w")
+        self._out = open(f"{root}.asm", "w")
         self._label_d: dict[str, int] = {}
 
     def set_file_name(self, fname: str) -> None:
@@ -154,12 +154,12 @@ class CodeWriter:
 
     def close(self) -> None:
         """Close the output file."""
-        self._f.close()
+        self._out.close()
 
     def _add_newline_and_writelines(self, lines: list[str]):
         """Add newline character to end of each line and write lines to file."""
         lines = [line + "\n" for line in lines]
-        self._f.writelines(lines)
+        self._out.writelines(lines)
 
     def _get_symbols(self, segment: str, index: int) -> tuple[str, str]:
         """Return the symbols for pointers to virtual registers.
