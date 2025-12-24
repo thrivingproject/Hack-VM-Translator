@@ -3,7 +3,7 @@ from command_type import CommandType
 from os import path
 
 _POP_TO_D = ("@SP", "AM=M-1", "D=M")
-_PUSH_D_TO_STACK = ("@SP", "A=M", "M=D", "@SP", "M=M+1")
+_INCREMENT_SP = ("@SP", "M=M+1")
 _VM_TRUE = -1
 _VM_FALSE = 0
 
@@ -62,41 +62,39 @@ class CodeWriter:
         """
         lines = [f"// {command}", *_POP_TO_D]
         match command:
-            case "add" | "sub" | "and" | "or" | "eq" | "gt" | "lt":
-                lines += [
-                    "@R14",
-                    "M=D",
-                    *_POP_TO_D,
-                    "@R14",
-                ]
-                if command == "add":
-                    lines.append("D=D+M")
-                elif command == "sub":
-                    lines.append("D=D-M")
-                elif command == "and":
-                    lines.append("D=D&M")
-                elif command == "or":
-                    lines.append("D=D|M")
-                else:
-                    op = command.upper()
-                    op_label_num = self._label_d.setdefault(op, 0)
-                    self._label_d[op] += 1
-                    lines += [
-                        "D=D-M",
-                        f"@{op}_TRUE.{op_label_num}",
-                        f"D;J{op}",
-                        f"D={_VM_FALSE}",
-                        f"@{op}_END.{op_label_num}",
-                        "0;JMP",
-                        f"({op}_TRUE.{op_label_num})",
-                        f"D={_VM_TRUE}",
-                        f"({op}_END.{op_label_num})",
-                    ]
             case "neg" | "not":
-                lines.append(f"D={'-' if command == 'neg' else '!'}D")
+                lines += [
+                    f"M={'-' if command == 'neg' else '!'}D",
+                    *_INCREMENT_SP,
+                ]
+            case "add" | "sub" | "and" | "or" | "eq" | "gt" | "lt":
+                lines.append("A=A-1")  # Get second arg
+                if command == "add":
+                    lines.append("M=D+M")
+                elif command == "sub":
+                    lines.append("M=M-D")
+                elif command == "and":
+                    lines.append("M=D&M")
+                elif command == "or":
+                    lines.append("M=D|M")
+                else:
+                    comparison = command.upper()
+                    count = self._label_d.setdefault(comparison, 0)
+                    self._label_d[comparison] += 1
+                    lines += [
+                        "D=M-D",
+                        # Assume comparison true
+                        f"M={_VM_TRUE}",
+                        f"@{comparison}_END.{count}",
+                        f"D;J{comparison}",
+                        # Correct M if not true
+                        "@SP",
+                        "A=M-1",
+                        f"M={_VM_FALSE}",
+                        f"({comparison}_END.{count})",
+                    ]
             case _:
                 raise ValueError(f"Bad write_arithmetic command: {command}")
-        lines += [*_PUSH_D_TO_STACK]
         self._add_newline_and_writelines(lines)
 
     def write_push_pop(
@@ -125,7 +123,10 @@ class CodeWriter:
                     lines += [f"@{ptr}"]
                 lines += [
                     f"D={'A' if segment == 'constant' else 'M'}",
-                    *_PUSH_D_TO_STACK,
+                    "@SP",
+                    "A=M",
+                    "M=D",
+                    *_INCREMENT_SP,
                 ]
             case CommandType.C_POP:
                 if segment == "constant":
