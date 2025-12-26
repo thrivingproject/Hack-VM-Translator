@@ -66,41 +66,36 @@ class CodeWriter:
             command: The arithmetic-logical command to be performed.
         """
         lines = [f"// {command}", *_POP_TO_D]
-        match command:
-            case "neg" | "not":
+        if command == "neg":
+            lines += ["M=-D", "@SP", "M=M+1"]
+        elif command == "not":
+            lines += ["M=!D", "@SP", "M=M+1"]
+        else:
+            lines.append("A=A-1")  # Get second arg
+            if command == "add":
+                lines.append("M=D+M")
+            elif command == "sub":
+                lines.append("M=M-D")
+            elif command == "and":
+                lines.append("M=D&M")
+            elif command == "or":
+                lines.append("M=D|M")
+            else:
+                comparison = command.upper()
+                count = self._label_d.setdefault(comparison, 0)
+                self._label_d[comparison] += 1
                 lines += [
-                    f"M={'-' if command == 'neg' else '!'}D",
+                    "D=M-D",
+                    # Assume comparison true
+                    f"M={_VM_TRUE}",
+                    f"@{comparison}_END.{count}",
+                    f"D;J{comparison}",
+                    # Correct M if not true
                     "@SP",
-                    "M=M+1",
+                    "A=M-1",
+                    f"M={_VM_FALSE}",
+                    f"({comparison}_END.{count})",
                 ]
-            case "add" | "sub" | "and" | "or" | "eq" | "gt" | "lt":
-                lines.append("A=A-1")  # Get second arg
-                if command == "add":
-                    lines.append("M=D+M")
-                elif command == "sub":
-                    lines.append("M=M-D")
-                elif command == "and":
-                    lines.append("M=D&M")
-                elif command == "or":
-                    lines.append("M=D|M")
-                else:
-                    comparison = command.upper()
-                    count = self._label_d.setdefault(comparison, 0)
-                    self._label_d[comparison] += 1
-                    lines += [
-                        "D=M-D",
-                        # Assume comparison true
-                        f"M={_VM_TRUE}",
-                        f"@{comparison}_END.{count}",
-                        f"D;J{comparison}",
-                        # Correct M if not true
-                        "@SP",
-                        "A=M-1",
-                        f"M={_VM_FALSE}",
-                        f"({comparison}_END.{count})",
-                    ]
-            case _:
-                raise ValueError(f"Bad write_arithmetic command: {command}")
         self._add_newline_and_writelines(lines)
 
     def write_push_pop(
