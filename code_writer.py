@@ -11,6 +11,12 @@ _SEGMENT_LABEL_MAP = {
     "this": "THIS",
     "that": "THAT",
 }
+_ARITHMETIC_ASM_MAP = {
+    "add": "M=D+M",
+    "sub": "M=M-D",
+    "and": "M=D&M",
+    "or": "M=D|M",
+}
 
 
 class CodeWriter:
@@ -26,6 +32,38 @@ class CodeWriter:
         self._fname = path.basename(root)
         self._out = open(f"{root}.asm", "w")
         self._label_d: dict[str, int] = {}
+        self._write_comparison_assembly()
+
+    def _write_comparison_assembly(self):
+        """Write assembly for eq, lt, gt operations.
+
+        This allows the code to be reusable such that each time the operation
+        is needs performed, all that the "caller" needs to do is create a
+        label symbol with return address, save it to D register, and jump here.
+        """
+        for operator in ("EQ", "LT", "GT"):
+            lines = [
+                f"({operator}_START)",
+                # Save return address
+                "@R14",
+                "M=D",
+                *_POP_TO_D,
+                # Calculate and push to stack
+                "A=A-1",
+                "D=M-D",
+                f"M={_VM_TRUE}",
+                f"@{operator}_END",
+                f"D;J{operator}",
+                "@SP",
+                "A=M-1",
+                f"M={_VM_FALSE}",
+                f"({operator}_END)",
+                # Load return address and jump
+                "@R14",
+                "A=M",
+                "0;JMP",
+            ]
+            self._add_newline_and_writelines(lines)
 
     def set_file_name(self, fname: str) -> None:
         """Inform that the translation of a new VM file has started."""
@@ -65,38 +103,39 @@ class CodeWriter:
         Args:
             command: The arithmetic-logical command to be performed.
         """
-        lines = [f"// {command}", *_POP_TO_D]
-        if command == "neg":
-            lines += ["M=-D", "@SP", "M=M+1"]
-        elif command == "not":
-            lines += ["M=!D", "@SP", "M=M+1"]
+        lines = [f"// {command}"]
+        if command in ("gt", "lt", "eq"):
+            lines += self._write_comparison_command(command)
         else:
-            lines.append("A=A-1")  # Get second arg
-            if command == "add":
-                lines.append("M=D+M")
-            elif command == "sub":
-                lines.append("M=M-D")
-            elif command == "and":
-                lines.append("M=D&M")
-            elif command == "or":
-                lines.append("M=D|M")
+            lines += [*_POP_TO_D]
+            if command in ("add", "sub", "and", "or"):
+                lines.append("A=A-1")  # Needed to access second operand
+                lines.append(_ARITHMETIC_ASM_MAP[command])
             else:
-                comparison = command.upper()
-                count = self._label_d.setdefault(comparison, 0)
-                self._label_d[comparison] += 1
-                lines += [
-                    "D=M-D",
-                    # Assume comparison true
-                    f"M={_VM_TRUE}",
-                    f"@{comparison}_END.{count}",
-                    f"D;J{comparison}",
-                    # Correct M if not true
-                    "@SP",
-                    "A=M-1",
-                    f"M={_VM_FALSE}",
-                    f"({comparison}_END.{count})",
-                ]
+                lines.append("M=-D" if command == "neg" else "M=!D")
+                lines += ["@SP", "M=M+1"]
         self._add_newline_and_writelines(lines)
+
+    def _write_comparison_command(self, command: str):
+        """Write assembly code to effect comparison commands.
+
+        A label symbol is created to indicate the address where execution
+        should resume after the comparison result is pushed onto the stack.
+        The same symbol is used as a variable to set the A register to the
+        return address, which is then stored in the D register. Control
+        then jumps to the reusable comparison assembly.
+        """
+        operator = command.upper()
+        num = self._label_d.setdefault(operator, 0)
+        self._label_d[operator] += 1
+        return_address_symbol = f"RET_ADDRESS_{operator}{num}"
+        return [
+            f"@{return_address_symbol}",
+            "D=A",
+            f"@{operator}_START",
+            "0;JMP",
+            f"({return_address_symbol})",
+        ]
 
     def write_push_pop(
         self,
@@ -137,7 +176,7 @@ class CodeWriter:
             ]
         else:
             lines += [*_POP_TO_D]
-            # Append assemble line to select memory register
+            # Append assembly line to select memory register
             if segment == "temp":
                 lines.append(f"@R{5 + index}")
             elif segment == "pointer":
