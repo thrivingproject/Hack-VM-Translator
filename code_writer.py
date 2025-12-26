@@ -32,7 +32,9 @@ class CodeWriter:
         self._fname = path.basename(root)
         self._out = open(f"{root}.asm", "w")
         self._label_d: dict[str, int] = {}
+        self._add_newline_and_writelines(["@START", "0;JMP"])
         self._write_comparison_assembly()
+        self._add_newline_and_writelines(["(START)"])
 
     def _write_comparison_assembly(self):
         """Write assembly for eq, lt, gt operations.
