@@ -41,7 +41,7 @@ class CodeWriter:
         for line in lines:
             self._out.write(line + "\n")
 
-    def _write_pop(self, segment, index):
+    def _get_pop_asm(self, segment, index):
         """Write to the output file the assembly code that implements the pop command.
 
         `pop segment index` pops the top stack value and stores it in segment[index].
@@ -77,7 +77,7 @@ class CodeWriter:
         lines.append("M=D")
         return lines
 
-    def _write_push(self, segment, index):
+    def _get_push_asm(self, segment, index):
         """Write to the output file the assembly code that implements the push command.
 
         `push segment index` pushes the value of segment[index] onto the stack.
@@ -220,9 +220,9 @@ class CodeWriter:
     ) -> None:
         """Write to the output file the assembly code that implements the push/pop command."""
         if command == CommandType.C_PUSH:
-            lines = self._write_push(segment, index)
+            lines = self._get_push_asm(segment, index)
         else:
-            lines = self._write_pop(segment, index)
+            lines = self._get_pop_asm(segment, index)
         self._writelines(lines)
 
     def close(self) -> None:
