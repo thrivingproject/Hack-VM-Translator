@@ -160,32 +160,12 @@ class CodeWriter:
             f"({return_address_symbol})",
         ]
 
+    def close(self) -> None:
+        """Close the output file."""
+        self._out.close()
+
     def set_file_name(self, fname: str) -> None:
         """Inform that the translation of a new VM file has started."""
-        ...
-
-    def write_label(self, label: str) -> None:
-        """Write assembly code that implements the label command."""
-        ...
-
-    def write_goto(self, label: str) -> None:
-        """Write assembly code that implements the goto command."""
-        ...
-
-    def write_if(self, label: str) -> None:
-        """Write assembly code that implements the if-goto command."""
-        ...
-
-    def write_function(self, fn_name: str, n_vars: int) -> None:
-        """Write assembly code that implements the function command."""
-        ...
-
-    def write_call(self, fn_name: str, n_vars: int) -> None:
-        """Write assembly code that implements the call command."""
-        ...
-
-    def write_return(self) -> None:
-        """Write assembly code that implements the return command."""
         ...
 
     def write_arithmetic(self, command: str) -> None:
@@ -212,6 +192,26 @@ class CodeWriter:
                 lines += ["@SP", "M=M+1"]
         self._writelines(lines)
 
+    def write_call(self, fn_name: str, n_vars: int) -> None:
+        """Write assembly code that implements the call command."""
+        ...
+
+    def write_function(self, fn_name: str, n_vars: int) -> None:
+        """Write assembly code that implements the function command."""
+        ...
+
+    def write_goto(self, label: str) -> None:
+        """Write assembly code that implements the goto command."""
+        ...
+
+    def write_if(self, label: str) -> None:
+        """Write assembly code that implements the if-goto command."""
+        ...
+
+    def write_label(self, label: str) -> None:
+        """Write assembly code that implements the label command."""
+        ...
+
     def write_push_pop(
         self,
         command: Literal[CommandType.C_POP, CommandType.C_PUSH],
@@ -226,6 +226,6 @@ class CodeWriter:
             lines = self._get_pop_asm(segment, index, pointer)
         self._writelines(lines)
 
-    def close(self) -> None:
-        """Close the output file."""
-        self._out.close()
+    def write_return(self) -> None:
+        """Write assembly code that implements the return command."""
+        ...
