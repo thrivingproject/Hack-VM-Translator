@@ -20,7 +20,7 @@ _ARITHMETIC_ASM_MAP = {
 
 
 class CodeWriter:
-    """Translate a parsed VM command into Hack assembly."""
+    """Maps VM commands to Hack machine language."""
 
     def __init__(self, fpath: str) -> None:
         """Open output file and gets read to write into it.
@@ -189,11 +189,12 @@ class CodeWriter:
         ...
 
     def write_arithmetic(self, command: str) -> None:
-        """Write to the output file the assembly code that implements the given arithmetic-logical command.
+        """Write to the output file the assembly code that implements
+        the given arithmetic-logical command.
 
-        For neg and not, one operand is popped off the stack; `operator operand` is computed.
-        Otherwise, two operands are popped; `operand1 operator operand2` is computed.
-        The computed value is pushed onto the stack.
+        For neg and not, one operand is popped off the stack.
+        Otherwise, two operands are popped. The computed value is
+        pushed onto the stack.
 
         Args:
             command: The arithmetic-logical command to be performed.
