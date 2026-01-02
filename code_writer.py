@@ -48,9 +48,9 @@ class CodeWriter:
         self._function = ""
         self._writelines(["// Bootstrap", "@256", "D=A", "@SP", "M=D"])
         self.write_call("Sys.init", 0)
-        self._writelines(self._get_reusable_comparisons())
-        self._writelines(self._get_reusable_write_call())
-        self._writelines(self._get_reusable_write_return())
+        self._write_reusable_comparisons()
+        self._write_reusable_write_call()
+        self._write_reusable_write_return()
 
     def _writelines(self, lines: list[str]):
         """Add newline character to end of each line and write lines to file."""
@@ -141,8 +141,8 @@ class CodeWriter:
         self._label_d[ret_label_prefix] += 1
         return ret_label_prefix + str(i)
 
-    def _get_reusable_comparisons(self):
-        """Return assembly for eq, lt, gt operations.
+    def _write_reusable_comparisons(self):
+        """Write assembly for reusable eq, lt, gt operations snippets.
 
         This allows the code to be reusable such that each time the operation
         is needs performed, all that the "caller" needs to do is create a
@@ -171,17 +171,17 @@ class CodeWriter:
                 "A=M",
                 "0;JMP",
             ]
-        return lines
+        self._writelines(lines)
 
-    def _get_reusable_write_call(self) -> list[str]:
-        """Return assembly of reusable write call snippet.
+    def _write_reusable_write_call(self):
+        """Write assembly of reusable write call snippet.
 
-        Snippet expects following:
+        When snippet is jumped to the following is expected:
         - nArgs pushed stored in R13
         - callee address stored in R14
         - caller return address is stored in D
         """
-        return [
+        lines = [
             "// Call reusable snippet",
             "(CALL_START)",
             *_PUSH_D_TO_STACK,  # Push return address
@@ -213,9 +213,11 @@ class CodeWriter:
             "A=M",
             "0;JMP",  # Jump to callee
         ]
+        self._writelines(lines)
 
-    def _get_reusable_write_return(self) -> list[str]:
-        return [
+    def _write_reusable_write_return(self):
+        """Write assembly of reusable write return snippet."""
+        lines = [
             "// Return reusable snippet",
             "(START_RETURN)",
             "@LCL",
@@ -251,6 +253,7 @@ class CodeWriter:
             "A=M",  # Select return address
             "0;JMP",  # Jump to the return address
         ]
+        self._writelines(lines)
 
     def _write_comparison_command(self, command: str):
         """Write assembly code to effect comparison commands.

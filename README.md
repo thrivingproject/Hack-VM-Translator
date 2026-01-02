@@ -1,6 +1,6 @@
 # Hack VM Translator
 
-Translates Hack VM code to Hack Assembly.
+Translates Hack VM code to Hack Assembly. Writes bootstrap code. Translates multiple VM files, or a single VM file, into a single `.asm` file.
 
 ## Design
 
