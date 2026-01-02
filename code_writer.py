@@ -20,6 +20,8 @@ _ARITHMETIC_ASM_MAP = {
 }
 _UPDATE_FRAME_POINTER = "@R13", "AM=M-1", "D=M"
 """Decrements frame pointer, goes to register, stores value in D"""
+_PUSH_D_TO_STACK = "@SP", "AM=M+1", "A=A-1", "M=D"
+"""Push D to top of stack and increments SP; destroys A"""
 
 
 class CodeWriter:
@@ -29,24 +31,34 @@ class CodeWriter:
         """Open output file and gets read to write into it.
 
         Args:
-            fpath: path to VM file
+            fpath: path to a single vm file or a folder containing VM files
         """
-        self._fpath_stem = fpath.stem
-        self._vm_fname = ""
         parent = fpath.parent if fpath.is_file() else fpath
-        self._out = open(f"{parent}/{fpath.stem}.asm", "w")
         self._label_d: dict[str, int] = {}
+        """Used to track unique labels for comparison commands."""
+        self._vm_fname: str
+        """Needed to add VM filename to labels and static variables."""
+        self._function: str
+        """Used for label symbols."""
+        self._out = open(f"{parent}/{fpath.stem}.asm", "w")
         self._bootstrap()
 
     def _bootstrap(self):
-        lines = ["@SP", "M=256", "@Sys.init", "0;JMP"]
-        lines += self._get_reusable_comparisons()
-        self._writelines(lines)
+        """Write initial assembly."""
+        self._function = ""
+        self._writelines(["// Bootstrap", "@256", "D=A", "@SP", "M=D"])
+        self.write_call("Sys.init", 0)
+        self._writelines(self._get_reusable_comparisons())
 
     def _writelines(self, lines: list[str]):
         """Add newline character to end of each line and write lines to file."""
         for line in lines:
-            self._out.write(line + "\n")
+            if not line.startswith(
+                ("// function", "// Bootstrap", "// Comparisons")
+            ):
+                self._out.write("\t" + line + "\n")
+            else:
+                self._out.write(line + "\n")
 
     def _get_pop_asm(self, segment: str, index, pointer_to_base: None | str):
         """`pop segment index` pops the top stack value and stores it
@@ -79,7 +91,7 @@ class CodeWriter:
             elif segment == "pointer":
                 lines.append("@THIS" if index == 0 else "@THAT")
             elif segment == "static":
-                lines.append(f"@{self._fpath_stem}.{index}")
+                lines.append(f"@{self._vm_fname}.{index}")
 
         # Store the value of register D in selected RAM register
         lines.append("M=D")
@@ -104,15 +116,22 @@ class CodeWriter:
             elif segment == "pointer":
                 lines.append("@THIS" if index == 0 else "@THAT")
             elif segment == "static":
-                lines.append(f"@{self._fpath_stem}.{index}")
+                lines.append(f"@{self._vm_fname}.{index}")
             else:  # Local, argument, this, and that
                 lines += [f"@{pointer_to_base}", "D=M", f"@{index}", "A=D+A"]
             # Set D register to selected RAM register's value
             lines.append("D=M")
 
         # Push D to top of stack
-        lines += ["@SP", "AM=M+1", "A=A-1", "M=D"]
+        lines += [*_PUSH_D_TO_STACK]
         return lines
+
+    def _get_return_label_symbol(self):
+        """Return `functionName$ret.i` and update label dictionary with current value of i."""
+        ret_label_prefix = f"{self._function}$ret."
+        i = self._label_d.setdefault(ret_label_prefix, 0)
+        self._label_d[ret_label_prefix] += 1
+        return ret_label_prefix + str(i)
 
     def _get_reusable_comparisons(self):
         """Return assembly for eq, lt, gt operations.
@@ -121,7 +140,7 @@ class CodeWriter:
         is needs performed, all that the "caller" needs to do is create a
         label symbol with return address, save it to D register, and jump here.
         """
-        lines: list[str] = []
+        lines: list[str] = ["// Comparisons"]
         for operator in ("EQ", "LT", "GT"):
             lines += [
                 f"({operator}_START)",
@@ -199,49 +218,97 @@ class CodeWriter:
                 lines += ["@SP", "M=M+1"]
         self._writelines(lines)
 
-    def write_call(self, fn_name: str, n_vars: int) -> None:
+    def write_call(self, fn_name: str, n_args: int) -> None:
         """Write assembly code that implements the call command.
 
-        `call fn_name n_args` calls the named function. The command informs that n_vars arguments have pushed onto the stack before the call.
+        `call fn_name n_args` calls the named function. The command informs that n_args arguments have pushed onto the stack before the call.
+
+        Args:
+            fn_name: The label for the callee.
+            n_args: The number of arguments pushed onto the stack.
         """
-        lines = [f"// call {fn_name} {n_vars}"]
+        return_label_symbol = self._get_return_label_symbol()
+        lines = [
+            f"// call {fn_name} {n_args}",
+            f"@{return_label_symbol}",
+            "D=A",
+            *_PUSH_D_TO_STACK,  # Push return address
+            "@LCL",
+            "D=M",
+            *_PUSH_D_TO_STACK,  # Push caller's LCL
+            "@ARG",
+            "D=M",
+            *_PUSH_D_TO_STACK,  # Push caller's ARG
+            "@THIS",
+            "D=M",
+            *_PUSH_D_TO_STACK,  # Push caller's THIS
+            "@THAT",
+            "D=M",
+            *_PUSH_D_TO_STACK,  # Push caller's THAT
+            f"@{5 + n_args}",
+            "D=A",
+            "@SP",
+            "D=M-D",
+            "@ARG",
+            "M=D",  # Update ARG for callee function
+            "@SP",
+            "D=M",
+            "@LCL",
+            "M=D",  # Update LCL for callee function
+            f"@{fn_name}",
+            "0;JMP",  # Jump to callee
+            f"({return_label_symbol})",
+        ]
         self._writelines(lines)
 
     def write_function(self, fn_name: str, n_vars: int) -> None:
         """Write assembly code that implements the function command.
 
         `function fn_name n_vars` marks the beginning of a function named fn_name. The command informs that the function has n_vars local variables.
+
+        Args:
+            fn_name: The name of the function being written.
+            n_vars: The number of local variables the function has.
         """
+        self._function = fn_name
         lines = [f"// function {fn_name} {n_vars}", f"({fn_name})"]
         # Push 0 to stack for each local variable
         if n_vars:
             lines += ["@SP", "A=M", "M=0"]
-            lines += ("A=A+1", "M=0") * (n_vars - 1)
-            lines.append("@SP")
-            lines += ("M=M+1",) * n_vars
+            for _ in range(n_vars - 1):
+                lines += ["@SP", "AM=M+1", "M=0"]
+            lines += ["@SP", "M=M+1"]
 
         self._writelines(lines)
 
     def write_goto(self, label: str) -> None:
-        """Write assembly code that implements the goto command."""
-        self._writelines([f"// goto {label}", f"@{label}", "0;JMP"])
+        """Write assembly code that implements the goto command.
+
+        `goto label` causes an unconditional jump. The goto command and the labeled jump destination must be in the same function.
+        """
+        self._writelines(
+            [f"// goto {label}", f"@{self._function}${label}", "0;JMP"]
+        )
 
     def write_if(self, label: str) -> None:
         """Write assembly code that implements the if-goto command.
 
-        The stack's topmost value is popped; if the value is not zero (false), i.e., if the value is true, execution continues from the location marked by the label; otherwise, execution continues from the next command in the program.
+        The stack's topmost value is popped; if the value is false, i.e., if the value is anything other than zero, execution continues from the location marked by the label; otherwise, if the value is zero, execution continues from the next command in the program. The if-goto command and the labeled jump destination must be in the same function.
         """
         lines = [
             f"// if-goto {label}",
             *_POP_TOP_OF_STACK_TO_D,
-            f"@{label}",
-            "D;JNE",  # Jump if D is not 0 (is not false)
+            f"@{self._function}${label}",
+            "D;JNE",  # Jump if D is true
         ]
         self._writelines(lines)
 
     def write_label(self, label: str) -> None:
-        """Write assembly code that implements the label command."""
-        self._writelines([f"// label {label}", f"({label})"])
+        """Write assembly code that implements the label command.
+
+        `label label` Labels the current location in the function's code. The scope of the label is the function in which it is defined.
+        """
+        self._writelines([f"// label {label}", f"({self._function}${label})"])
 
     def write_push_pop(
         self,
@@ -266,8 +333,8 @@ class CodeWriter:
             f"// return",
             "@LCL",
             "D=M-1",
-            "@R13",  # Pointer to last register of stack frame
-            "M=D",  # Store address of stack frame in R13
+            "@R13",
+            "M=D",  # Store pointer to end of caller's stack frame in R13
             *_POP_TOP_OF_STACK_TO_D,
             "@ARG",
             "A=M",
@@ -291,7 +358,8 @@ class CodeWriter:
             "@LCL",
             "M=D",  # Restore LCL for caller
             "@R13",
-            "A=M-1",
-            "0;JMP",  # go to the return address
+            "A=M-1",  # Select register containing pointer to return address
+            "A=M",  # Select return address
+            "0;JMP",  # Jump to the return address
         ]
         self._writelines(lines)
